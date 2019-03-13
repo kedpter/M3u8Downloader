@@ -1,6 +1,17 @@
 ### M3u8-dl
 
+![alt text](https://img.shields.io/pypi/v/m3u8_dl.svg)
+![alt text](https://img.shields.io/travis/kedpter/m3u8_dl.svg)
+![alt text](https://readthedocs.org/projects/m3u8_dl/badge/?version=latest)
+
 M3u8-dl is a simple command-line util which downloads m3u8 file.
+
+
+### Install
+
+```bash
+pip install m3u8-dl
+```
 
 ### Usage
 
