@@ -14,13 +14,14 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = ['Click>=6.0'
-                ]
-setup_requirements = [ ]
+requirements = []
 
-test_requirements = [ ]
+setup_requirements = []
+
+test_requirements = []
 
 here = os.path.abspath(os.path.dirname(__file__))
+
 
 def read(*parts):
     # intentionally *not* adding an encoding option to open, See:
@@ -32,11 +33,13 @@ def read(*parts):
 def find_pakcage_info(info, *file_paths):
     info_file = read(*file_paths)
 
-    match = re.search(r"^__" + re.escape(info) + r"__ = ['\"]([^'\"]*)['\"]", info_file, re.M)
+    match = re.search(r"^__" + re.escape(info) + r"__ = ['\"]([^'\"]*)['\"]",
+                      info_file, re.M)
 
     if match:
         return match.group(1)
     raise RuntimeError("Unable to find {} string.".format(info))
+
 
 setup(
     author=find_pakcage_info('author', 'src', 'm3u8_dl', '__init__.py'),
@@ -55,13 +58,13 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
     ],
-    package_dir={"":"src"},
+    package_dir={"": "src"},
     packages=find_packages(
         where="src",
         exclude=["contrib", "docs", "tests*", "tasks"],
     ),
     # package_data={'yourpackage': ['*.txt', 'path/to/resources/*.txt']},
-    description="Python downloader for HTTP Live Streaming (HLS), which is m3u8 file ",
+    description="Python downloader for HTTP Live Streaming (HLS), which is m3u8 file ", # noqa
     entry_points={
         'console_scripts': [
             'm3u8-dl=m3u8_dl.cli:main',

@@ -110,3 +110,5 @@ docs
 .python-version
 .README.md
 .pypirc
+*.ts
+*.restore

@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
 
 import m3u8
-import click
 import requests
 from urllib.parse import urlparse, urljoin
 import os
 import shutil
 from threading import Thread, Lock
+
+
+def monitor_proc(proc_name):
+    def monitor(func):
+        def wrapper(*args, **kwargs):
+            print('Executing: {} ...'.format(proc_name))
+            func(*args, **kwargs)
+            print('Finished: {} '.format(proc_name))
+        return wrapper
+    return monitor
 
 
 class DownloadFileNotValidException(Exception):
@@ -37,16 +46,18 @@ class HttpFile(object):
 
 class M3u8File(HttpFile):
 
-    def __init__(self, fileuri, headers, output_file):
+    def __init__(self, fileuri, headers, output_file, finished=False):
+        super(HttpFile, self).__init__()
         self.fileuri = fileuri
         self.headers = headers
         self.output_file = output_file
+        self.finished = finished
 
     def get_file(self):
-        download_file(self.fileuri, self.headers, self.output_file)
-        self._parse_file()
+        if not self.finished:
+            download_file(self.fileuri, self.headers, self.output_file)
 
-    def _parse_file(self):
+    def parse_file(self):
         self.m3u8_obj = m3u8.load(self.output_file)
         return self.m3u8_obj
 
@@ -61,10 +72,12 @@ class M3u8File(HttpFile):
 
 class TsFile(HttpFile):
     def __init__(self, fileuri, headers, output_file, index):
+        super(HttpFile, self).__init__()
         self.fileuri = fileuri
         self.headers = headers
         self.output_file = output_file
         self.index = index
+        self.finished = False
 
     @staticmethod
     def check_valid(request):
@@ -77,59 +90,70 @@ class TsFile(HttpFile):
     def get_file(self):
         download_file(self.fileuri, self.headers, self.output_file,
                       self.check_valid)
+        self.finished = True
 
 
 class M3u8Downloader:
     m3u8_filename = 'output.m3u8'
     ts_tmpfolder = '.tmpts'
 
-    def __init__(self, fileuri, base_uri, referer, threads, output,
-                 on_progress_callback=None):
-        self.file = fileuri
-        self.base_uri = base_uri if base_uri.endswith('/') else base_uri + '/'
-        self.referer = referer
-        self.threads = threads
-        self.output_file = output
+    def __init__(self, restore_obj, on_progress_callback=None):
+        self.restore_obj = restore_obj
 
-        self.fileuri = fileuri
-        self.headers = {'Referer': referer}
+        user_options = self.restore_obj['user_options']
+
+        self.fileuri = user_options['file_uri']
+        self.base_uri = user_options['base_uri'] if user_options['base_uri'].endswith('/') else user_options['base_uri'] + '/'  # noqa
+        self.referer = user_options['referer']
+        self.threads = user_options['threads']
+        self.output_file = user_options['output_file']
+
+        self.headers = {'Referer': self.referer}
         self.tsfiles = []
+
+        self.ts_index = 0
+        self.lock = Lock()
 
         self.on_progress = on_progress_callback
 
         if not os.path.isdir(M3u8Downloader.ts_tmpfolder):
             os.mkdir(M3u8Downloader.ts_tmpfolder)
 
+    @monitor_proc('download m3u8 file')
     def get_m3u8file(self):
+        finished = self.restore_obj['processes']['get_m3u8file']['finished']
         self.m3u8file = M3u8File(self.fileuri, self.headers,
-                                 M3u8Downloader.m3u8_filename)
-
+                                 M3u8Downloader.m3u8_filename, finished)
         self.m3u8file.get_file()
+        finished = True
 
+    @monitor_proc('parse m3u8 file')
     def parse_m3u8file(self):
+        self.m3u8file.parse_file()
         self.tssegments = self.m3u8file.get_tssegments()
         self.__all_tsseg_len = len(self.tssegments)
         if len(self.tssegments) == 0:
-            click.echo(self.m3u8file.m3u8_obj.data)
+            print(self.m3u8file.m3u8_obj.data)
             raise M3u8DownloaderNoStreamException()
 
+    @monitor_proc('download ts files')
     def get_tsfiles(self):
-        self.ts_index = 0
-        self.lock = Lock()
-
+        """
+        start multiple threads to download ts files,
+        theads will fetch links from the pool (ts segments)
+        """
         self.thread_pool = []
         for i in range(self.threads):
-            t = Thread(target=self._continue_download)
+            t = Thread(target=self._keep_download, args=(
+                self.restore_obj['downloaded_ts'], ))
             self.thread_pool.append(t)
             t.daemon = True
             t.start()
         for i in range(self.threads):
             self.thread_pool[i].join()
-        # for ts in tssegments:
-        # self.download_ts(ts)
         pass
 
-    def _continue_download(self, ):
+    def _keep_download(self, dd_ts):
         while True:
             try:
                 with self.lock:
@@ -138,27 +162,29 @@ class M3u8Downloader:
                     index = self.ts_index
             except IndexError:
                 return
-            self._download_ts(tsseg, index)
+            self._download_ts(tsseg, index, dd_ts)
 
-    def _download_ts(self, tsseg, index):
+    def _download_ts(self, tsseg, index, dd_ts):
         try:
             outfile = M3u8File.get_path_by_uri(tsseg['uri'],
                                                M3u8Downloader.ts_tmpfolder)
             uri = urljoin(self.base_uri, tsseg['uri'])
             tsfile = TsFile(uri, self.headers, outfile, index)
-            tsfile.get_file()
+
+            if not tsseg['uri'] in dd_ts:
+                tsfile.get_file()
+                dd_ts.append(tsseg['uri'])
             self.tsfiles.append(tsfile)
 
             self.on_progress(len(self.tsfiles), self.__all_tsseg_len)
-            # self._show_progress_bar(len(self.tsfiles), self.__all_tsseg_len)
-            # print('append:' + tsfile.output_file)
         except DownloadFileNotValidException:
             self._download_ts(tsseg, index)
         except Exception as e:
-            click.echo(e)
-            click.echo('Exception occurred, ignore ...')
-            self._download_ts(tsseg, index)
+            print(e)
+            print('Exception occurred, ignore ...')
+            self._download_ts(tsseg, index, dd_ts)
 
+    @monitor_proc('merging ts files')
     def merge(self):
         # reorder
         self.tsfiles.sort(key=lambda x: x.index)
@@ -167,14 +193,8 @@ class M3u8Downloader:
                 print(tsfile.output_file)
                 with open(tsfile.output_file, 'rb') as mergefile:
                     shutil.copyfileobj(mergefile, merged)
-        #
-        # with open(self.output_file, 'wb') as out:
-        #     for tsfile in self.tsfiles:
-        #         # tsfile = M3u8File.get_path_by_uri(tsseg['uri'],
-        #         #                               M3u8Downloader.ts_tmpfolder)
-        #         with open(tsfile.output_file, 'rb') as f:
-        #             out.write(f.read())
 
+    @monitor_proc('clean up')
     def cleanup(self):
         # clean
         shutil.rmtree(M3u8Downloader.ts_tmpfolder)
