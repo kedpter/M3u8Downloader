@@ -80,7 +80,8 @@ def execute(restore_obj):
     # clean everything Downloader generates
     m.cleanup()
     # clean restore
-    os.unlink(restore_file)
+    if os.path.isfile(restore_file):
+        os.unlink(restore_file)
 
 
 def main():
