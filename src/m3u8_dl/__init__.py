@@ -4,6 +4,6 @@
 
 __author__ = """kedpter"""
 __email__ = '790476448@qq.com'
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 
 from m3u8_dl.M3u8Downloader import M3u8Downloader # noqa
