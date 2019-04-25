@@ -76,12 +76,18 @@ def execute(restore_obj):
 
     m.parse_m3u8file()
     m.get_tsfiles()
-    m.merge()
+    if m.is_task_success:
+        m.merge()
+
     # clean everything Downloader generates
     m.cleanup()
     # clean restore
     if os.path.isfile(restore_file):
         os.unlink(restore_file)
+
+    if not m.is_task_success:
+        print('Download Failed')
+        print('Try it again with options --refer and --uri')
 
 
 def main():

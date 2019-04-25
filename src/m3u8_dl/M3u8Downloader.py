@@ -26,6 +26,10 @@ class M3u8DownloaderNoStreamException(Exception):
     pass
 
 
+class M3u8DownloaderMaxTryException(Exception):
+    pass
+
+
 def download_file(fileuri, headers, filename, check=None):
     with requests.get(fileuri, headers=headers, stream=True) as r:
         if check and not check(r):
@@ -96,9 +100,11 @@ class TsFile(HttpFile):
 class M3u8Downloader:
     m3u8_filename = 'output.m3u8'
     ts_tmpfolder = '.tmpts'
+    max_try = 10
 
     def __init__(self, restore_obj, on_progress_callback=None):
         self.restore_obj = restore_obj
+        self.is_task_success = False
 
         user_options = self.restore_obj['user_options']
 
@@ -154,17 +160,25 @@ class M3u8Downloader:
         pass
 
     def _keep_download(self, dd_ts):
+        trycnt = 0
         while True:
             try:
                 with self.lock:
                     tsseg = self.tssegments.pop(0)
                     self.ts_index += 1
                     index = self.ts_index
+                    trycnt = 0
             except IndexError:
+                self.is_task_success = True
                 return
-            self._download_ts(tsseg, index, dd_ts)
+            try:
+                self._download_ts(tsseg, index, dd_ts, trycnt)
+            except M3u8DownloaderMaxTryException:
+                break
 
-    def _download_ts(self, tsseg, index, dd_ts):
+    def _download_ts(self, tsseg, index, dd_ts, trycnt):
+        if trycnt > M3u8Downloader.max_try:
+            raise M3u8DownloaderMaxTryException
         try:
             outfile = M3u8File.get_path_by_uri(tsseg['uri'],
                                                M3u8Downloader.ts_tmpfolder)
@@ -182,7 +196,8 @@ class M3u8Downloader:
         except Exception as e:
             print(e)
             print('Exception occurred, ignore ...')
-            self._download_ts(tsseg, index, dd_ts)
+            trycnt = trycnt + 1
+            self._download_ts(tsseg, index, dd_ts, trycnt)
 
     @monitor_proc('merging ts files')
     def merge(self):
