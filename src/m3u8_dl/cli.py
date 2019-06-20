@@ -37,7 +37,7 @@ def restore_from_file():
     return restore_obj
 
 
-def restore_init(uri, referer, threads, fileuri, output):
+def restore_init(uri, referer, threads, fileuri, output, insecure, cerfile):
     """
     restore default init
     """
@@ -48,6 +48,13 @@ def restore_init(uri, referer, threads, fileuri, output):
     user_options['referer'] = referer
     user_options['threads'] = threads
     user_options['output_file'] = output
+    if insecure:
+        user_options['sslverify'] = False
+    if not insecure:
+        if cerfile == '':
+            user_options['sslverify'] = True
+        else:
+            user_options['sslverify'] = cerfile
 
     restore_obj.setdefault('processes',
                            {'get_m3u8file': {'finished': False}})
@@ -101,6 +108,10 @@ def main():
                         help="the Referer in request header")
     parser.add_argument("-t", "--threads", type=int, default=10,
                         help="how many threads to start for download")
+    parser.add_argument("--insecure", action="store_true",
+                        help="ignore verifying the SSL certificate")
+    parser.add_argument("--certfile", default='',
+                        help="do not ignore SSL certificate, verify it with a file or directory with CAs") # noqa
     parser.add_argument("fileuri", nargs="?",
                         help="url [e.g.:http://example.com/xx.m3u8]")
     parser.add_argument("output", nargs="?", help="file for saving [e.g.: example.ts]")  # noqa
@@ -119,7 +130,7 @@ def main():
             sys.exit(0)
         restore_obj = restore_init(args.uri, args.referer,
                                    args.threads, args.fileuri,
-                                   args.output)
+                                   args.output, args.insecure, args.certfile)
     execute(restore_obj)
 
 

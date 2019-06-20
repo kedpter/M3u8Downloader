@@ -112,3 +112,4 @@ docs
 .pypirc
 *.ts
 *.restore
+*.m3u8

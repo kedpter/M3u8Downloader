@@ -6,6 +6,9 @@ from urllib.parse import urlparse, urljoin
 import os
 import shutil
 from threading import Thread, Lock
+import urllib3
+# to surpress InsecureRequestWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def monitor_proc(proc_name):
@@ -30,8 +33,8 @@ class M3u8DownloaderMaxTryException(Exception):
     pass
 
 
-def download_file(fileuri, headers, filename, check=None):
-    with requests.get(fileuri, headers=headers, stream=True) as r:
+def download_file(fileuri, headers, filename, check=None, verify=True):
+    with requests.get(fileuri, headers=headers, stream=True, verify=verify) as r: # noqa
         if check and not check(r):
             print('Not a valid ts file')
             print(r.content)
@@ -50,16 +53,18 @@ class HttpFile(object):
 
 class M3u8File(HttpFile):
 
-    def __init__(self, fileuri, headers, output_file, finished=False):
+    def __init__(self, fileuri, headers, output_file, sslverify, finished=False): # noqa
         super(HttpFile, self).__init__()
         self.fileuri = fileuri
         self.headers = headers
         self.output_file = output_file
         self.finished = finished
+        self.sslverify = sslverify
 
     def get_file(self):
         if not self.finished:
-            download_file(self.fileuri, self.headers, self.output_file)
+            download_file(self.fileuri, self.headers,
+                          self.output_file, verify=self.sslverify)
 
     def parse_file(self):
         self.m3u8_obj = m3u8.load(self.output_file)
@@ -75,13 +80,14 @@ class M3u8File(HttpFile):
 
 
 class TsFile(HttpFile):
-    def __init__(self, fileuri, headers, output_file, index):
+    def __init__(self, fileuri, headers, output_file, index, sslverify):
         super(HttpFile, self).__init__()
         self.fileuri = fileuri
         self.headers = headers
         self.output_file = output_file
         self.index = index
         self.finished = False
+        self.sslverify = sslverify
 
     @staticmethod
     def check_valid(request):
@@ -93,7 +99,7 @@ class TsFile(HttpFile):
 
     def get_file(self):
         download_file(self.fileuri, self.headers, self.output_file,
-                      self.check_valid)
+                      self.check_valid, self.sslverify)
         self.finished = True
 
 
@@ -113,6 +119,7 @@ class M3u8Downloader:
         self.referer = user_options['referer']
         self.threads = user_options['threads']
         self.output_file = user_options['output_file']
+        self.sslverify = user_options['sslverify']
 
         self.headers = {'Referer': self.referer}
         self.tsfiles = []
@@ -129,7 +136,8 @@ class M3u8Downloader:
     def get_m3u8file(self):
         finished = self.restore_obj['processes']['get_m3u8file']['finished']
         self.m3u8file = M3u8File(self.fileuri, self.headers,
-                                 M3u8Downloader.m3u8_filename, finished)
+                                 M3u8Downloader.m3u8_filename, self.sslverify,
+                                 finished)
         self.m3u8file.get_file()
         finished = True
 
@@ -183,7 +191,7 @@ class M3u8Downloader:
             outfile = M3u8File.get_path_by_uri(tsseg['uri'],
                                                M3u8Downloader.ts_tmpfolder)
             uri = urljoin(self.base_uri, tsseg['uri'])
-            tsfile = TsFile(uri, self.headers, outfile, index)
+            tsfile = TsFile(uri, self.headers, outfile, index, self.sslverify)
 
             if not tsseg['uri'] in dd_ts:
                 tsfile.get_file()
