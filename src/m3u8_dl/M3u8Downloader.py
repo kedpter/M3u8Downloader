@@ -200,6 +200,7 @@ class M3u8Downloader:
 
             self.on_progress(len(self.tsfiles), self.__all_tsseg_len)
         except DownloadFileNotValidException:
+            trycnt = trycnt + 1
             self._download_ts(tsseg, index, dd_ts, trycnt)
         except Exception as e:
             print(e)
