@@ -34,7 +34,7 @@ class M3u8DownloaderMaxTryException(Exception):
 
 
 def download_file(fileuri, headers, filename, check=None, verify=True):
-    with requests.get(fileuri, headers=headers, stream=True, verify=verify) as r: # noqa
+    with requests.get(fileuri, headers=headers, stream=True, verify=verify) as r:  # noqa
         if check and not check(r):
             print('Not a valid ts file')
             print(r.content)
@@ -51,10 +51,9 @@ class HttpFile(object):
         raise NotImplementedError()
 
 
-class M3u8File(HttpFile):
+class M3u8File:
 
-    def __init__(self, fileuri, headers, output_file, sslverify, finished=False): # noqa
-        super(HttpFile, self).__init__()
+    def __init__(self, fileuri, headers, output_file, sslverify, finished=False):  # noqa
         self.fileuri = fileuri
         self.headers = headers
         self.output_file = output_file
@@ -62,9 +61,16 @@ class M3u8File(HttpFile):
         self.sslverify = sslverify
 
     def get_file(self):
-        if not self.finished:
-            download_file(self.fileuri, self.headers,
-                          self.output_file, verify=self.sslverify)
+        # check scheme (http or local)
+        parsed_uri = urlparse(self.fileuri)
+        if parsed_uri.scheme == "http" or parsed_uri.scheme == "https":
+            if not self.finished:
+                download_file(self.fileuri, self.headers,
+                              self.output_file, verify=self.sslverify)
+        elif parsed_uri.scheme == "file":
+            shutil.copy(parsed_uri.path, self.output_file)
+        else:
+            raise Exception("Unspported url scheme")
 
     def parse_file(self):
         self.m3u8_obj = m3u8.load(self.output_file)

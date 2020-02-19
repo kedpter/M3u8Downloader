@@ -38,3 +38,15 @@ You can even make it run faster by using `-t`, which means how many threads you 
 `--restore` will restore the last session.
 
 For more details, check `--help`.
+
+### Notes
+- Version 0.2.0
+    1. Add support to local m3u8 files. For example
+    ```
+    m3u8-dl file:///Users/username/Downloads/master.m3u8 example.ts
+    ```
+
+    2. Create a fake m3u8 file depends on ts range. For example
+    ```
+    m3u8-dl -f master.m3u8 -r 1,100 --ts seg-@NUMBER-f1-v1-a1.ts?validfrom=1581996390&validto=1582003590&ip=89.187.161.206&hdl=-1&hash=rz91LEl6l%2FSZH83nXkv5BXzUhOQ%3D
+    ```

@@ -2,6 +2,7 @@
 
 """Console script for M3u8Downloader."""
 from m3u8_dl import M3u8Downloader
+from m3u8_dl.faker import Faker
 import json
 import signal
 import sys
@@ -111,27 +112,36 @@ def main():
     parser.add_argument("--insecure", action="store_true",
                         help="ignore verifying the SSL certificate")
     parser.add_argument("--certfile", default='',
-                        help="do not ignore SSL certificate, verify it with a file or directory with CAs") # noqa
+                        help="do not ignore SSL certificate, verify it with a file or directory with CAs")  # noqa
     parser.add_argument("fileuri", nargs="?",
                         help="url [e.g.:http://example.com/xx.m3u8]")
     parser.add_argument("output", nargs="?", help="file for saving [e.g.: example.ts]")  # noqa
     parser.add_argument("--restore", action="store_true",
                         help="restore from last session")
+    parser.add_argument("-f", "--fake", help="fake a m3u8 file")
+    parser.add_argument("--range", help="ts range")
+    parser.add_argument("--ts", help="ts link")
     args = parser.parse_args()
 
     restore_obj = {}
 
-    if args.restore:
-        restore_obj = restore_from_file()
+    if args.fake:
+        range = args.range.split(',')
+        faker = Faker()
+        faker.create_file(args.fake, args.ts, int(range[0]), int(range[1])+1)
+
     else:
-        if not args.fileuri or not args.output:
-            print('error: [fileuri] and [output] are necessary if not in restore\n')  # noqa
-            parser.print_help()
-            sys.exit(0)
-        restore_obj = restore_init(args.uri, args.referer,
-                                   args.threads, args.fileuri,
-                                   args.output, args.insecure, args.certfile)
-    execute(restore_obj)
+        if args.restore:
+            restore_obj = restore_from_file()
+        else:
+            if not args.fileuri or not args.output:
+                print('error: [fileuri] and [output] are necessary if not in restore\n')  # noqa
+                parser.print_help()
+                sys.exit(0)
+            restore_obj = restore_init(args.uri, args.referer,
+                                       args.threads, args.fileuri,
+                                       args.output, args.insecure, args.certfile)
+        execute(restore_obj)
 
 
 if __name__ == "__main__":
