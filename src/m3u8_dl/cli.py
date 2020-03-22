@@ -104,23 +104,23 @@ def main():
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("-u", "--uri", default='',
-                        help="base uri for ts when downloading")
+                        help="[0]base uri for ts when downloading")
     parser.add_argument("-r", "--referer", default='',
-                        help="the Referer in request header")
+                        help="[0]the Referer in request header")
     parser.add_argument("-t", "--threads", type=int, default=10,
-                        help="how many threads to start for download")
+                        help="[0]how many threads to start for download")
     parser.add_argument("--insecure", action="store_true",
-                        help="ignore verifying the SSL certificate")
+                        help="[0]ignore verifying the SSL certificate")
     parser.add_argument("--certfile", default='',
-                        help="do not ignore SSL certificate, verify it with a file or directory with CAs")  # noqa
+                        help="[0]do not ignore SSL certificate, verify it with a file or directory with CAs")  # noqa
     parser.add_argument("fileuri", nargs="?",
-                        help="url [e.g.:http://example.com/xx.m3u8]")
-    parser.add_argument("output", nargs="?", help="file for saving [e.g.: example.ts]")  # noqa
+                        help="[0]url [e.g.:http://example.com/xx.m3u8]")
+    parser.add_argument("output", nargs="?", help="[0]file for saving [e.g.: example.ts]")  # noqa
     parser.add_argument("--restore", action="store_true",
-                        help="restore from last session")
-    parser.add_argument("-f", "--fake", help="fake a m3u8 file")
-    parser.add_argument("--range", help="ts range")
-    parser.add_argument("--ts", help="ts link")
+                        help="[1]restore from last session")
+    parser.add_argument("-f", "--fake", help="[2]fake a m3u8 file")
+    parser.add_argument("--range", help="[2]ts range")
+    parser.add_argument("--ts", help="[2]ts link")
     args = parser.parse_args()
 
     restore_obj = {}

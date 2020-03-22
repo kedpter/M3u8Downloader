@@ -160,7 +160,7 @@ class M3u8Downloader:
     def get_tsfiles(self):
         """
         start multiple threads to download ts files,
-        theads will fetch links from the pool (ts segments)
+        threads will fetch links from the pool (ts segments)
         """
         self.thread_pool = []
         for i in range(self.threads):
