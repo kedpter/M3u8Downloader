@@ -8,9 +8,10 @@ import signal
 import sys
 import os
 import argparse
+from m3u8_dl import M3u8Context
+import pickle
+from m3u8_dl import PickleContextRestore
 
-
-restore_file = 'm3u8_dl.restore'
 
 
 def _show_progress_bar(downloaded, total):
@@ -28,54 +29,16 @@ def _show_progress_bar(downloaded, total):
           ' {:.1f}'.format(percent).ljust(5) + ' %', end='\r', flush=True)  # noqa
 
 
-def restore_from_file():
-    """
-    restore init from the previous backup file
-    """
-    restore_obj = {}
-    with open(restore_file, 'r') as f:
-        restore_obj = json.load(f)
-    return restore_obj
-
-
-def restore_init(uri, referer, threads, fileuri, output, insecure, cerfile):
-    """
-    restore default init
-    """
-    restore_obj = {}
-    user_options = {}
-    user_options['file_uri'] = fileuri
-    user_options['base_uri'] = uri
-    user_options['referer'] = referer
-    user_options['threads'] = threads
-    user_options['output_file'] = output
-    if insecure:
-        user_options['sslverify'] = False
-    if not insecure:
-        if cerfile == '':
-            user_options['sslverify'] = True
-        else:
-            user_options['sslverify'] = cerfile
-
-    restore_obj.setdefault('processes',
-                           {'get_m3u8file': {'finished': False}})
-
-    restore_obj.setdefault('user_options', user_options)
-    restore_obj.setdefault('downloaded_ts', [])
-    return restore_obj
-
-
-def execute(restore_obj):
+def execute(restore, context):
     """
     download ts file by restore object (dict)
     """
-    m = M3u8Downloader(restore_obj, on_progress_callback=_show_progress_bar)
+    m = M3u8Downloader(context, on_progress_callback=_show_progress_bar)
 
     def signal_handler(sig, frame):
         print('\nCaptured Ctrl + C ! Saving Current Session ...')
-        with open(restore_file, 'w') as out:
-            json.dump(restore_obj, out)
-        sys.exit(0)
+        restore.dump(context)
+        sys.exit(1)
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -90,12 +53,11 @@ def execute(restore_obj):
     # clean everything Downloader generates
     m.cleanup()
     # clean restore
-    if os.path.isfile(restore_file):
-        os.unlink(restore_file)
+    restore.cleanup()
 
     if not m.is_task_success:
         print('Download Failed')
-        print('Try it again with options --refer and --uri')
+        print('Try it again with options --refer and --url')
 
 
 def main():
@@ -103,8 +65,8 @@ def main():
     deal with the console
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--uri", default='',
-                        help="[0]base uri for ts when downloading")
+    parser.add_argument("-u", "--url", default='',
+                        help="[0]base url for ts when downloading")
     parser.add_argument("-r", "--referer", default='',
                         help="[0]the Referer in request header")
     parser.add_argument("-t", "--threads", type=int, default=10,
@@ -113,7 +75,7 @@ def main():
                         help="[0]ignore verifying the SSL certificate")
     parser.add_argument("--certfile", default='',
                         help="[0]do not ignore SSL certificate, verify it with a file or directory with CAs")  # noqa
-    parser.add_argument("fileuri", nargs="?",
+    parser.add_argument("fileurl", nargs="?",
                         help="[0]url [e.g.:http://example.com/xx.m3u8]")
     parser.add_argument("output", nargs="?", help="[0]file for saving [e.g.: example.ts]")  # noqa
     parser.add_argument("--restore", action="store_true",
@@ -121,9 +83,10 @@ def main():
     parser.add_argument("-f", "--fake", help="[2]fake a m3u8 file")
     parser.add_argument("--range", help="[2]ts range")
     parser.add_argument("--ts", help="[2]ts link")
+
     args = parser.parse_args()
 
-    restore_obj = {}
+    restore = PickleContextRestore()
 
     if args.fake:
         range = args.range.split(',')
@@ -132,16 +95,26 @@ def main():
 
     else:
         if args.restore:
-            restore_obj = restore_from_file()
+            context = restore.load()
         else:
-            if not args.fileuri or not args.output:
-                print('error: [fileuri] and [output] are necessary if not in restore\n')  # noqa
+            if not args.fileurl or not args.output:
+                print('error: [fileurl] and [output] are necessary if not in restore\n')  # noqa
                 parser.print_help()
                 sys.exit(0)
-            restore_obj = restore_init(args.uri, args.referer,
-                                       args.threads, args.fileuri,
-                                       args.output, args.insecure, args.certfile)
-        execute(restore_obj)
+
+            context = M3u8Context(file_url=args.fileurl, referer=args.referer,
+                                  threads=args.threads, output_file=args.output,
+                                  get_m3u8file_complete=False, downloaded_ts=[])
+            context["base_url"] = args.url \
+                if args.url .endswith('/') else args.url + '/'  # noqa
+            if args.insecure:
+                context['sslverify'] = False
+            if not args.insecure:
+                if args.certfile == '':
+                    context['sslverify'] = True
+                else:
+                    context['sslverify'] = args.certfile
+        execute(restore, context)
 
 
 if __name__ == "__main__":

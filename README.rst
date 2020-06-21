@@ -45,7 +45,7 @@ If you are failed to download the stream, try it again with the options below:
 
 
 * Specify the Referer with ``-r`` when you're blocked by the website (403 forbidden).
-* Specify the base uri with ``-u`` when ``#EXTINF hls-720p0.ts`` has no base uri in ``output.m3u8``.
+* Specify the base url with ``-u`` when ``#EXTINF hls-720p0.ts`` has no base url in ``output.m3u8``.
 
 You can even make it run faster by using ``-t``\ , which means how many threads you want to start.
 

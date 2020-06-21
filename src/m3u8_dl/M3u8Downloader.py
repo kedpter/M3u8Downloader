@@ -33,8 +33,8 @@ class M3u8DownloaderMaxTryException(Exception):
     pass
 
 
-def download_file(fileuri, headers, filename, check=None, verify=True):
-    with requests.get(fileuri, headers=headers, stream=True, verify=verify) as r:  # noqa
+def download_file(fileurl, headers, filename, check=None, verify=True):
+    with requests.get(fileurl, headers=headers, stream=True, verify=verify) as r:  # noqa
         if check and not check(r):
             print('Not a valid ts file')
             print(r.content)
@@ -45,16 +45,10 @@ def download_file(fileuri, headers, filename, check=None, verify=True):
                     f.write(chunk)
 
 
-class HttpFile(object):
-
-    def get_file(self):
-        raise NotImplementedError()
-
-
 class M3u8File:
 
-    def __init__(self, fileuri, headers, output_file, sslverify, finished=False):  # noqa
-        self.fileuri = fileuri
+    def __init__(self, fileurl, headers, output_file, sslverify, finished=False):  # noqa
+        self.fileurl = fileurl
         self.headers = headers
         self.output_file = output_file
         self.finished = finished
@@ -62,13 +56,13 @@ class M3u8File:
 
     def get_file(self):
         # check scheme (http or local)
-        parsed_uri = urlparse(self.fileuri)
-        if parsed_uri.scheme == "http" or parsed_uri.scheme == "https":
+        parsed_url = urlparse(self.fileurl)
+        if parsed_url.scheme == "http" or parsed_url.scheme == "https":
             if not self.finished:
-                download_file(self.fileuri, self.headers,
+                download_file(self.fileurl, self.headers,
                               self.output_file, verify=self.sslverify)
-        elif parsed_uri.scheme == "file":
-            shutil.copy(parsed_uri.path, self.output_file)
+        elif parsed_url.scheme == "file":
+            shutil.copy(parsed_url.path, self.output_file)
         else:
             raise Exception("Unspported url scheme")
 
@@ -80,15 +74,14 @@ class M3u8File:
         return self.m3u8_obj.data['segments']
 
     @staticmethod
-    def get_path_by_uri(uri, folder):
+    def get_path_by_url(url, folder):
         return os.path.join(folder,
-                            urlparse(uri).path.split('/')[-1])
+                            urlparse(url).path.split('/')[-1])
 
 
-class TsFile(HttpFile):
-    def __init__(self, fileuri, headers, output_file, index, sslverify):
-        super(HttpFile, self).__init__()
-        self.fileuri = fileuri
+class TsFile():
+    def __init__(self, fileurl, headers, output_file, index, sslverify):
+        self.fileurl = fileurl
         self.headers = headers
         self.output_file = output_file
         self.index = index
@@ -104,9 +97,38 @@ class TsFile(HttpFile):
         return True
 
     def get_file(self):
-        download_file(self.fileuri, self.headers, self.output_file,
+        download_file(self.fileurl, self.headers, self.output_file,
                       self.check_valid, self.sslverify)
         self.finished = True
+
+
+class M3u8Context(object):
+    rendering_attrs = ['file_url', 'base_url', 'referer', 'threads', 'output_file', 'sslverify',
+                       'get_m3u8file_complete', 'downloaded_ts_urls']
+
+    def __init__(self, **kwargs):
+        self._container = {}
+        for key, value in kwargs.items():
+            self._container.setdefault(key, value)
+
+    def __getitem__(self, item):
+        return self._container[item]
+
+    def __setitem__(self, key, value):
+        self._container[key] = value
+
+    def __iter__(self):
+        return iter(self._container.items())
+
+    def __getstate__(self):
+        obj_dict = {}
+        for attr in self.rendering_attrs:
+            if attr in self._container:
+                obj_dict[attr] = self._container[attr]
+        return obj_dict
+
+    def __setstate__(self, obj):
+        self._container = obj
 
 
 class M3u8Downloader:
@@ -114,18 +136,16 @@ class M3u8Downloader:
     ts_tmpfolder = '.tmpts'
     max_try = 10
 
-    def __init__(self, restore_obj, on_progress_callback=None):
-        self.restore_obj = restore_obj
+    def __init__(self, context, on_progress_callback=None):
+        self.context = context
         self.is_task_success = False
 
-        user_options = self.restore_obj['user_options']
-
-        self.fileuri = user_options['file_uri']
-        self.base_uri = user_options['base_uri'] if user_options['base_uri'].endswith('/') else user_options['base_uri'] + '/'  # noqa
-        self.referer = user_options['referer']
-        self.threads = user_options['threads']
-        self.output_file = user_options['output_file']
-        self.sslverify = user_options['sslverify']
+        self.fileurl = context['file_url']
+        self.base_url = context['base_url']
+        self.referer = context['referer']
+        self.threads = context['threads']
+        self.output_file = context['output_file']
+        self.sslverify = context['sslverify']
 
         self.headers = {'Referer': self.referer}
         self.tsfiles = []
@@ -135,17 +155,16 @@ class M3u8Downloader:
 
         self.on_progress = on_progress_callback
 
-        if not os.path.isdir(M3u8Downloader.ts_tmpfolder):
-            os.mkdir(M3u8Downloader.ts_tmpfolder)
+        if not os.path.isdir(self.ts_tmpfolder):
+            os.mkdir(self.ts_tmpfolder)
 
     @monitor_proc('download m3u8 file')
     def get_m3u8file(self):
-        finished = self.restore_obj['processes']['get_m3u8file']['finished']
-        self.m3u8file = M3u8File(self.fileuri, self.headers,
-                                 M3u8Downloader.m3u8_filename, self.sslverify,
-                                 finished)
+        self.m3u8file = M3u8File(self.fileurl, self.headers,
+                                 self.m3u8_filename, self.sslverify,
+                                 self.context['get_m3u8file_complete'])
         self.m3u8file.get_file()
-        finished = True
+        self.context['get_m3u8file_complete'] = True
 
     @monitor_proc('parse m3u8 file')
     def parse_m3u8file(self):
@@ -165,7 +184,7 @@ class M3u8Downloader:
         self.thread_pool = []
         for i in range(self.threads):
             t = Thread(target=self._keep_download, args=(
-                self.restore_obj['downloaded_ts'], ))
+                self.context['downloaded_ts'], ))
             self.thread_pool.append(t)
             t.daemon = True
             t.start()
@@ -191,17 +210,19 @@ class M3u8Downloader:
                 break
 
     def _download_ts(self, tsseg, index, dd_ts, trycnt):
-        if trycnt > M3u8Downloader.max_try:
+        uri = tsseg['uri']
+        if trycnt > self.max_try:
             raise M3u8DownloaderMaxTryException
         try:
-            outfile = M3u8File.get_path_by_uri(tsseg['uri'],
-                                               M3u8Downloader.ts_tmpfolder)
-            uri = urljoin(self.base_uri, tsseg['uri'])
-            tsfile = TsFile(uri, self.headers, outfile, index, self.sslverify)
+            outfile = M3u8File.get_path_by_url(uri,
+                                               self.ts_tmpfolder)
+            url = urljoin(self.base_url, uri)
+            tsfile = TsFile(url, self.headers, outfile, index, self.sslverify)
 
-            if not tsseg['uri'] in dd_ts:
+
+            if not uri in dd_ts:
                 tsfile.get_file()
-                dd_ts.append(tsseg['uri'])
+                dd_ts.append(uri)
             self.tsfiles.append(tsfile)
 
             self.on_progress(len(self.tsfiles), self.__all_tsseg_len)
@@ -227,5 +248,5 @@ class M3u8Downloader:
     @monitor_proc('clean up')
     def cleanup(self):
         # clean
-        shutil.rmtree(M3u8Downloader.ts_tmpfolder)
-        os.unlink(M3u8Downloader.m3u8_filename)
+        shutil.rmtree(self.ts_tmpfolder)
+        os.unlink(self.m3u8_filename)

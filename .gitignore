@@ -118,3 +118,4 @@ script.sh
 *.mp4
 *.json
 auto.py
+.idea
