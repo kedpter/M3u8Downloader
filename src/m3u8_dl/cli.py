@@ -104,7 +104,7 @@ def main():
 
             context = M3u8Context(file_url=args.fileurl, referer=args.referer,
                                   threads=args.threads, output_file=args.output,
-                                  get_m3u8file_complete=False, downloaded_ts=[])
+                                  get_m3u8file_complete=False, downloaded_ts_urls=[])
             context["base_url"] = args.url \
                 if args.url .endswith('/') else args.url + '/'  # noqa
             if args.insecure:

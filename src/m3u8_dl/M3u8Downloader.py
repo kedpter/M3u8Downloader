@@ -184,7 +184,7 @@ class M3u8Downloader:
         self.thread_pool = []
         for i in range(self.threads):
             t = Thread(target=self._keep_download, args=(
-                self.context['downloaded_ts'], ))
+                self.context['downloaded_ts_urls'], ))
             self.thread_pool.append(t)
             t.daemon = True
             t.start()
