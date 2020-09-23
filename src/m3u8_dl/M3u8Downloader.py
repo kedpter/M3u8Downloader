@@ -219,7 +219,6 @@ class M3u8Downloader:
             url = urljoin(self.base_url, uri)
             tsfile = TsFile(url, self.headers, outfile, index, self.sslverify)
 
-
             if not uri in dd_ts:
                 tsfile.get_file()
                 dd_ts.append(uri)
@@ -240,9 +239,8 @@ class M3u8Downloader:
         # reorder
         self.tsfiles.sort(key=lambda x: x.index)
         with open(self.output_file, 'wb') as merged:
-            print('\nmerging ts files')
             for tsfile in range(len(self.tsfiles)):
-                self._show_progress_bar(tsfile, len(self.tsfiles))
+                self._show_progress_bar(tsfile + 1, len(self.tsfiles))
                 with open(self.tsfiles[tsfile].output_file, 'rb') as mergefile:
                     shutil.copyfileobj(mergefile, merged)
 
@@ -261,7 +259,7 @@ class M3u8Downloader:
         # 20 hashtag(#)
         hashtags = int(percent / 100 * htlen)
         print('|'
-          + '#' * hashtags + ' ' * (htlen - hashtags) +
-          '|' +
-          '  {0}/{1} '.format(downloaded, total) +
-          ' {:.1f}'.format(percent).ljust(5) + ' %', end='\r', flush=True)  # noqa
+            + '#' * hashtags + ' ' * (htlen - hashtags) +
+            '|' +
+            '  {0}/{1} '.format(downloaded, total) +
+            ' {:.1f}'.format(percent).ljust(5) + ' %', end='\r', flush=True)  # noqa
