@@ -225,7 +225,7 @@ class M3u8Downloader:
                 dd_ts.append(uri)
             self.tsfiles.append(tsfile)
 
-            self.on_progress(len(self.tsfiles), self.__all_tsseg_len)
+            self.on_progress(self, len(self.tsfiles), self.__all_tsseg_len)
         except DownloadFileNotValidException:
             trycnt = trycnt + 1
             self._download_ts(tsseg, index, dd_ts, trycnt)
@@ -240,9 +240,10 @@ class M3u8Downloader:
         # reorder
         self.tsfiles.sort(key=lambda x: x.index)
         with open(self.output_file, 'wb') as merged:
-            for tsfile in self.tsfiles:
-                print(tsfile.output_file)
-                with open(tsfile.output_file, 'rb') as mergefile:
+            print('\nmerging ts files')
+            for tsfile in range(len(self.tsfiles)):
+                self._show_progress_bar(tsfile, len(self.tsfiles))
+                with open(self.tsfiles[tsfile].output_file, 'rb') as mergefile:
                     shutil.copyfileobj(mergefile, merged)
 
     @monitor_proc('clean up')
@@ -250,3 +251,17 @@ class M3u8Downloader:
         # clean
         shutil.rmtree(self.ts_tmpfolder)
         os.unlink(self.m3u8_filename)
+
+    def _show_progress_bar(self, downloaded, total):
+        """
+        progress bar for command line
+        """
+        htlen = 33
+        percent = downloaded / total * 100
+        # 20 hashtag(#)
+        hashtags = int(percent / 100 * htlen)
+        print('|'
+          + '#' * hashtags + ' ' * (htlen - hashtags) +
+          '|' +
+          '  {0}/{1} '.format(downloaded, total) +
+          ' {:.1f}'.format(percent).ljust(5) + ' %', end='\r', flush=True)  # noqa
