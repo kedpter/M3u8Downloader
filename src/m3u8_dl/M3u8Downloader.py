@@ -7,6 +7,7 @@ import os
 import shutil
 from threading import Thread, Lock
 import urllib3
+from m3u8_dl import myprint
 # to surpress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -14,9 +15,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def monitor_proc(proc_name):
     def monitor(func):
         def wrapper(*args, **kwargs):
-            print('Executing: {} ...'.format(proc_name))
+            myprint.myprint('Executing: {} ...'.format(proc_name))
             func(*args, **kwargs)
-            print('Finished: {} '.format(proc_name))
+            myprint.myprint('Finished: {} '.format(proc_name))
         return wrapper
     return monitor
 
@@ -36,8 +37,8 @@ class M3u8DownloaderMaxTryException(Exception):
 def download_file(fileurl, headers, filename, check=None, verify=True):
     with requests.get(fileurl, headers=headers, stream=True, verify=verify) as r:  # noqa
         if check and not check(r):
-            print('Not a valid ts file')
-            print(r.content)
+            myprint.myprint('Not a valid ts file')
+            myprint.myprint(r.content)
             raise DownloadFileNotValidException()
         with open(filename, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):
@@ -92,8 +93,6 @@ class TsFile():
     def check_valid(request):
         if request.headers['Content-Type'] == 'text/html':
             return False
-        # print(request.headers['Content-Type'])
-        # print(request.content)
         return True
 
     def get_file(self):
@@ -104,7 +103,7 @@ class TsFile():
 
 class M3u8Context(object):
     rendering_attrs = ['file_url', 'base_url', 'referer', 'threads', 'output_file', 'sslverify',
-                       'get_m3u8file_complete', 'downloaded_ts_urls']
+                       'get_m3u8file_complete', 'downloaded_ts_urls', 'quiet']
 
     def __init__(self, **kwargs):
         self._container = {}
@@ -147,6 +146,9 @@ class M3u8Downloader:
         self.output_file = context['output_file']
         self.sslverify = context['sslverify']
 
+        if context['quiet']:
+            myprint.myprint = myprint.quiet_print
+
         self.headers = {'Referer': self.referer}
         self.tsfiles = []
 
@@ -172,7 +174,7 @@ class M3u8Downloader:
         self.tssegments = self.m3u8file.get_tssegments()
         self.__all_tsseg_len = len(self.tssegments)
         if len(self.tssegments) == 0:
-            print(self.m3u8file.m3u8_obj.data)
+            myprint.myprint(self.m3u8file.m3u8_obj.data)
             raise M3u8DownloaderNoStreamException()
 
     @monitor_proc('download ts files')
@@ -230,8 +232,8 @@ class M3u8Downloader:
             trycnt = trycnt + 1
             self._download_ts(tsseg, index, dd_ts, trycnt)
         except Exception as e:
-            print(e)
-            print('Exception occurred, ignore ...')
+            myprint.myprint(e)
+            myprint.myprint('Exception occurred, ignore ...')
             trycnt = trycnt + 1
             self._download_ts(tsseg, index, dd_ts, trycnt)
 
@@ -241,7 +243,7 @@ class M3u8Downloader:
         self.tsfiles.sort(key=lambda x: x.index)
         with open(self.output_file, 'wb') as merged:
             for tsfile in self.tsfiles:
-                print(tsfile.output_file)
+                myprint.myprint(tsfile.output_file)
                 with open(tsfile.output_file, 'rb') as mergefile:
                     shutil.copyfileobj(mergefile, merged)
 

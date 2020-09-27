@@ -56,7 +56,7 @@ def execute(restore, context):
     restore.cleanup()
 
     if not m.is_task_success:
-        print('Download Failed')
+        print('Download failed')
         print('Try it again with options --refer and --url')
 
 
@@ -83,6 +83,8 @@ def main():
     parser.add_argument("-f", "--fake", help="[2]fake a m3u8 file")
     parser.add_argument("--range", help="[2]ts range")
     parser.add_argument("--ts", help="[2]ts link")
+    parser.add_argument("--quiet", action="store_true",
+                        help="suppress output")
 
     args = parser.parse_args()
 
@@ -104,9 +106,10 @@ def main():
 
             context = M3u8Context(file_url=args.fileurl, referer=args.referer,
                                   threads=args.threads, output_file=args.output,
-                                  get_m3u8file_complete=False, downloaded_ts_urls=[])
+                                  get_m3u8file_complete=False, downloaded_ts_urls=[], quiet=args.quiet)
             context["base_url"] = args.url \
                 if args.url .endswith('/') else args.url + '/'  # noqa
+
             if args.insecure:
                 context['sslverify'] = False
             if not args.insecure:
