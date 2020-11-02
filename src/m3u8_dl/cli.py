@@ -13,12 +13,26 @@ import pickle
 from m3u8_dl import PickleContextRestore
 
 
+def _show_progress_bar(downloaded, total):
+    """
+    progress bar for command line
+    """
+    htlen = 33
+    percent = downloaded / total * 100
+    # 20 hashtag(#)
+    hashtags = int(percent / 100 * htlen)
+    print('|'
+          + '#' * hashtags + ' ' * (htlen - hashtags) +
+          '|' +
+          '  {0}/{1} '.format(downloaded, total) +
+          ' {:.1f}'.format(percent).ljust(5) + ' %', end='\r', flush=True)  # noqa
+
 
 def execute(restore, context):
     """
     download ts file by restore object (dict)
     """
-    m = M3u8Downloader(context, on_progress_callback=M3u8Downloader._show_progress_bar)
+    m = M3u8Downloader(context, on_progress_callback=_show_progress_bar)
 
     def signal_handler(sig, frame):
         print('\nCaptured Ctrl + C ! Saving Current Session ...')
@@ -41,7 +55,7 @@ def execute(restore, context):
     restore.cleanup()
 
     if not m.is_task_success:
-        print('Download Failed')
+        print('Download failed')
         print('Try it again with options --refer and --url')
 
 
@@ -76,7 +90,7 @@ def main():
     if args.fake:
         range = args.range.split(',')
         faker = Faker()
-        faker.create_file(args.fake, args.ts, int(range[0]), int(range[1])+1)
+        faker.create_file(args.fake, args.ts, int(range[0]), int(range[1]) + 1)
 
     else:
         if args.restore:
@@ -91,7 +105,8 @@ def main():
                                   threads=args.threads, output_file=args.output,
                                   get_m3u8file_complete=False, downloaded_ts_urls=[])
             context["base_url"] = args.url \
-                if args.url .endswith('/') else args.url + '/'  # noqa
+                if args.url.endswith('/') else args.url + '/'  # noqa
+
             if args.insecure:
                 context['sslverify'] = False
             if not args.insecure:
