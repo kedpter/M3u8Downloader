@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from Crypto.Cipher import AES
 import m3u8
 import requests
 from urllib.parse import urlparse, urljoin
@@ -7,16 +9,22 @@ import os
 import shutil
 from threading import Thread, Lock
 import urllib3
+import logging
+import requests_cache
+
+requests_cache.install_cache()
 # to surpress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+logger = logging.getLogger(__name__)
 
 
 def monitor_proc(proc_name):
     def monitor(func):
         def wrapper(*args, **kwargs):
-            print('Executing: {} ...'.format(proc_name))
+            logger.info('Executing: {} ...'.format(proc_name))
             func(*args, **kwargs)
-            print('Finished: {} '.format(proc_name))
+            logger.info('Finished: {} '.format(proc_name))
         return wrapper
     return monitor
 
@@ -33,16 +41,20 @@ class M3u8DownloaderMaxTryException(Exception):
     pass
 
 
-def download_file(fileurl, headers, filename, check=None, verify=True):
+def download_file(fileurl, headers, filename, check=None, verify=True, decryptor=None):
     with requests.get(fileurl, headers=headers, stream=True, verify=verify) as r:  # noqa
         if check and not check(r):
-            print('Not a valid ts file')
-            print(r.content)
+            logger.info('Not a valid ts file')
+            logger.info(r.content)
             raise DownloadFileNotValidException()
+
         with open(filename, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:
-                    f.write(chunk)
+                    if decryptor:
+                        f.write(decryptor.decrypt(chunk))
+                    else:
+                        f.write(chunk)
 
 
 class M3u8File:
@@ -68,7 +80,6 @@ class M3u8File:
 
     def parse_file(self):
         self.m3u8_obj = m3u8.load(self.output_file)
-        return self.m3u8_obj
 
     def get_tssegments(self):
         return self.m3u8_obj.data['segments']
@@ -80,25 +91,24 @@ class M3u8File:
 
 
 class TsFile():
-    def __init__(self, fileurl, headers, output_file, index, sslverify):
+    def __init__(self, fileurl, headers, output_file, index, sslverify, decryptor):
         self.fileurl = fileurl
         self.headers = headers
         self.output_file = output_file
         self.index = index
         self.finished = False
         self.sslverify = sslverify
+        self.decryptor = decryptor
 
     @staticmethod
     def check_valid(request):
         if request.headers['Content-Type'] == 'text/html':
             return False
-        # print(request.headers['Content-Type'])
-        # print(request.content)
         return True
 
     def get_file(self):
         download_file(self.fileurl, self.headers, self.output_file,
-                      self.check_valid, self.sslverify)
+                      self.check_valid, self.sslverify, self.decryptor)
         self.finished = True
 
 
@@ -133,7 +143,7 @@ class M3u8Context(object):
 
 class M3u8Downloader:
     m3u8_filename = 'output.m3u8'
-    ts_tmpfolder = '.tmpts'
+    ts_tmpfolder = 'tmpts'
     max_try = 10
 
     def __init__(self, context, on_progress_callback=None):
@@ -149,6 +159,16 @@ class M3u8Downloader:
 
         self.headers = {'Referer': self.referer}
         self.tsfiles = []
+
+        parsed_url = urlparse(self.fileurl)
+        scheme = parsed_url.scheme if parsed_url.scheme else 'https'
+        # This converts example.com/720.m3u8/?example=true#test -> https://example.com/720.m3u8
+        # useful if the m3u8 file contains something like
+
+        # EXTINF:2.000000,
+        # 0274.ts
+
+        self.fixed_fileurl = scheme + '://' + parsed_url.netloc + '/' + '/'.join(parsed_url.path.strip('/').split('/')[:-1]) + '/'
 
         self.ts_index = 0
         self.lock = Lock()
@@ -172,7 +192,7 @@ class M3u8Downloader:
         self.tssegments = self.m3u8file.get_tssegments()
         self.__all_tsseg_len = len(self.tssegments)
         if len(self.tssegments) == 0:
-            print(self.m3u8file.m3u8_obj.data)
+            logger.info(self.m3u8file.m3u8_obj.data)
             raise M3u8DownloaderNoStreamException()
 
     @monitor_proc('download ts files')
@@ -210,6 +230,21 @@ class M3u8Downloader:
                 break
 
     def _download_ts(self, tsseg, index, dd_ts, trycnt):
+        key = self.m3u8file.m3u8_obj.segments[index - 1].key
+        decryptor = None
+        if key:
+            backend = default_backend()
+            if urlparse(key.uri).path == key.uri:
+                key.uri = urljoin(self.fixed_fileurl, key.uri)
+
+            key_headers = self.headers
+            with requests.get(key.uri, headers=key_headers) as r:
+                segmet_key = r.content
+
+            # cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=backend)
+            # decryptor = cipher.decryptor()
+            decryptor = AES.new(segmet_key, AES.MODE_CBC, segmet_key)
+
         uri = tsseg['uri']
         if trycnt > self.max_try:
             raise M3u8DownloaderMaxTryException
@@ -217,20 +252,23 @@ class M3u8Downloader:
             outfile = M3u8File.get_path_by_url(uri,
                                                self.ts_tmpfolder)
             url = urljoin(self.base_url, uri)
-            tsfile = TsFile(url, self.headers, outfile, index, self.sslverify)
+            if url.startswith('/'):
+                url = self.fixed_fileurl + url[1:]
 
-            if not uri in dd_ts:
+            tsfile = TsFile(url, self.headers, outfile, index, self.sslverify, decryptor)
+
+            if uri not in dd_ts:
                 tsfile.get_file()
                 dd_ts.append(uri)
             self.tsfiles.append(tsfile)
 
-            self.on_progress(self, len(self.tsfiles), self.__all_tsseg_len)
+            self.on_progress(len(self.tsfiles), self.__all_tsseg_len)
         except DownloadFileNotValidException:
             trycnt = trycnt + 1
             self._download_ts(tsseg, index, dd_ts, trycnt)
         except Exception as e:
-            print(e)
-            print('Exception occurred, ignore ...')
+            logger.info(e)
+            logger.info('Exception occurred, ignore ...')
             trycnt = trycnt + 1
             self._download_ts(tsseg, index, dd_ts, trycnt)
 
@@ -239,9 +277,9 @@ class M3u8Downloader:
         # reorder
         self.tsfiles.sort(key=lambda x: x.index)
         with open(self.output_file, 'wb') as merged:
-            for tsfile in range(len(self.tsfiles)):
-                self._show_progress_bar(tsfile + 1, len(self.tsfiles))
-                with open(self.tsfiles[tsfile].output_file, 'rb') as mergefile:
+            for tsfile in self.tsfiles:
+                logger.info(tsfile.output_file)
+                with open(tsfile.output_file, 'rb') as mergefile:
                     shutil.copyfileobj(mergefile, merged)
 
     @monitor_proc('clean up')
@@ -249,17 +287,3 @@ class M3u8Downloader:
         # clean
         shutil.rmtree(self.ts_tmpfolder)
         os.unlink(self.m3u8_filename)
-
-    def _show_progress_bar(self, downloaded, total):
-        """
-        progress bar for command line
-        """
-        htlen = 33
-        percent = downloaded / total * 100
-        # 20 hashtag(#)
-        hashtags = int(percent / 100 * htlen)
-        print('|'
-            + '#' * hashtags + ' ' * (htlen - hashtags) +
-            '|' +
-            '  {0}/{1} '.format(downloaded, total) +
-            ' {:.1f}'.format(percent).ljust(5) + ' %', end='\r', flush=True)  # noqa
