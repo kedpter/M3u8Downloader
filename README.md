@@ -50,3 +50,6 @@ For more details, check `--help`.
     ```
     m3u8-dl -f master.m3u8 -r 1,100 --ts seg-@NUMBER-f1-v1-a1.ts?validfrom=1581996390&validto=1582003590&ip=89.187.161.206&hdl=-1&hash=rz91LEl6l%2FSZH83nXkv5BXzUhOQ%3D
     ```
+- Version 0.2.3
+    1. Add support for AES-128 encrypted streams
+    2. Add support for partial URLs
