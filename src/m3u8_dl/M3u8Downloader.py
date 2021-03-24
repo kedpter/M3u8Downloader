@@ -7,7 +7,10 @@ import os
 import shutil
 from threading import Thread, Lock
 import urllib3
+import tempfile
+
 from m3u8_dl import myprint
+
 # to surpress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -131,8 +134,6 @@ class M3u8Context(object):
 
 
 class M3u8Downloader:
-    m3u8_filename = 'output.m3u8'
-    ts_tmpfolder = '.tmpts'
     max_try = 10
 
     def __init__(self, context, on_progress_callback=None):
@@ -157,8 +158,8 @@ class M3u8Downloader:
 
         self.on_progress = on_progress_callback
 
-        if not os.path.isdir(self.ts_tmpfolder):
-            os.mkdir(self.ts_tmpfolder)
+        self.ts_tmpfolder = tempfile.mkdtemp()
+        self.m3u8_filename = os.path.join(self.ts_tmpfolder, 'output.m3u8')
 
     @monitor_proc('download m3u8 file')
     def get_m3u8file(self):
@@ -251,4 +252,3 @@ class M3u8Downloader:
     def cleanup(self):
         # clean
         shutil.rmtree(self.ts_tmpfolder)
-        os.unlink(self.m3u8_filename)
