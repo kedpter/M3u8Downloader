@@ -69,6 +69,10 @@ def main():
                         help="[0]base url for ts when downloading")
     parser.add_argument("-r", "--referer", default='',
                         help="[0]the Referer in request header")
+    parser.add_argument("-a", "--user-agent", type=str, dest="user_agent",
+                        default=("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:95.0) "
+                                 "Gecko/20100101 Firefox/95.0"),
+                        help="[0]the User-Agent in request header")
     parser.add_argument("-t", "--threads", type=int, default=10,
                         help="[0]how many threads to start for download")
     parser.add_argument("--insecure", action="store_true",
@@ -104,7 +108,7 @@ def main():
                 parser.print_help()
                 sys.exit(0)
 
-            context = M3u8Context(file_url=args.fileurl, referer=args.referer,
+            context = M3u8Context(file_url=args.fileurl, referer=args.referer, user_agent=args.user_agent,
                                   threads=args.threads, output_file=args.output,
                                   get_m3u8file_complete=False, downloaded_ts_urls=[], quiet=args.quiet)
             context["base_url"] = args.url \
