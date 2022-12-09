@@ -132,7 +132,7 @@ class M3u8Context(object):
 
 class M3u8Downloader:
     m3u8_filename = 'output.m3u8'
-    ts_tmpfolder = '.tmpts'
+    ts_tmpfolder = 'tmpts'
     max_try = 10
 
     def __init__(self, context, on_progress_callback=None):
@@ -225,7 +225,8 @@ class M3u8Downloader:
 
 
             if not uri in dd_ts:
-                tsfile.get_file()
+                if not os.path.exists(outfile):
+                    tsfile.get_file()
                 dd_ts.append(uri)
             self.tsfiles.append(tsfile)
 

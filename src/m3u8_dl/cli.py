@@ -49,13 +49,11 @@ def execute(restore, context):
     m.get_tsfiles()
     if m.is_task_success:
         m.merge()
-
-    # clean everything Downloader generates
-    m.cleanup()
-    # clean restore
-    restore.cleanup()
-
-    if not m.is_task_success:
+        # clean everything Downloader generates
+        m.cleanup()
+        # clean restore
+        restore.cleanup()
+    else:
         print('Download failed')
         print('Try it again with options --refer and --url')
 
